@@ -1,17 +1,19 @@
 using NeoServer.Domain.Common;
 using NeoServer.Domain.Common.Contracts;
-using NeoServer.Domain.World.Events;
 using NeoServer.Domain.Common.Contracts.Creatures;
 using NeoServer.Domain.Common.Contracts.Items;
 using NeoServer.Domain.Common.Contracts.Items.Types;
 using NeoServer.Domain.Common.Contracts.Services;
 using NeoServer.Domain.Common.Contracts.World;
 using NeoServer.Domain.Common.Contracts.World.Tiles;
+using NeoServer.Domain.Common.Creatures.Structs;
 using NeoServer.Domain.Common.Location;
 using NeoServer.Domain.Common.Results;
 using NeoServer.Domain.Common.Services;
 using NeoServer.Domain.Common.Texts;
+using NeoServer.Domain.Items.Services;
 using NeoServer.Domain.Mail;
+using NeoServer.Domain.World.Events;
 using Location = NeoServer.Domain.Common.Location.Structs.Location;
 
 namespace NeoServer.Domain.Creatures.Services;
@@ -82,7 +84,7 @@ public class MapItemMovementService(
         }
 
         // --- Core move ---
-        return ExecuteMove(item, from, destination as IDynamicTile, amount, fromPosition, toPosition);
+        return ExecuteMove(player, item, from, destination as IDynamicTile, amount, fromPosition, toPosition);
     }
 
     /// <summary>
@@ -154,7 +156,7 @@ public class MapItemMovementService(
         }
         
         // --- Core move ---
-        return ExecuteMove(item, from, destination as IDynamicTile, amount, fromPosition, toPosition);
+        return ExecuteMove(player, item, from, destination as IDynamicTile, amount, fromPosition, toPosition);
     }
 
     #region Validation
@@ -208,8 +210,7 @@ public class MapItemMovementService(
     private static Result<OperationResultList<IItem>> ConsumeItem(IItem item, IHasItem from, byte amount,
         byte fromPosition)
     {
-        from.RemoveItem(item, amount, fromPosition, out _);
-        return Result<OperationResultList<IItem>>.Success;
+        return from.RemoveItem(item, amount, fromPosition, out _);
     }
 
     /// <summary>
@@ -219,123 +220,87 @@ public class MapItemMovementService(
     private Result<OperationResultList<IItem>> HandleMailBoxMove(IPlayer player, IItem item, IHasItem from,
         IHasItem destination, byte amount, byte fromPosition, byte? toPosition)
     {
-        var canAdd = destination.CanAddItem(item, amount, toPosition);
-        if (!canAdd.Succeeded) return new Result<OperationResultList<IItem>>(canAdd.Reason);
+        var movement = new ItemMovementContext(player, item, from, destination, amount, fromPosition, toPosition);
+        var canAdd = destination.CanAddItem(movement);
+        if (canAdd.Failed) return new Result<OperationResultList<IItem>>(canAdd.Reason);
 
-        (destination, toPosition) = ResolveContainerDestination(from, destination, toPosition);
-
-        var possibleAmountToAdd = destination.PossibleAmountToAdd(item, toPosition);
+        var possibleAmountToAdd = destination.PossibleAmountToAdd(movement);
         if (possibleAmountToAdd == 0)
             return new Result<OperationResultList<IItem>>(InvalidOperation.NotEnoughRoom);
 
-        var removedItem = RemoveItem(item, from, amount, fromPosition, possibleAmountToAdd);
-
-        var result = Result<OperationResultList<IItem>>.Success;
-        var sendMailResult = Result.NotPossible;
-
-        if (destination is IDynamicTile finalTile && finalTile.HasFlag(TileFlags.MailBox) && item.IsMailable)
+        var amountToRemove = item is ICumulative
+            ? (byte)Math.Min(amount, possibleAmountToAdd)
+            : (byte)1;
+        var removeResult = from.RemoveItem(item, amountToRemove, fromPosition, out var removedItem);
+        if (removeResult.Failed || removedItem is null)
         {
-            sendMailResult = mailService.Send(player, item);
-            if (sendMailResult.Succeeded)
-            {
-                item.SetNewLocation(Location.Zero);
-                result = Result<OperationResultList<IItem>>.Success;
-            }
+            var reason = removeResult.Failed ? removeResult.Error : InvalidOperation.NotPossible;
+            return new Result<OperationResultList<IItem>>(reason);
         }
 
-        if (sendMailResult.Failed) result = AddToDestination(removedItem, from, destination, toPosition);
+        var sendMailResult = mailService.Send(player, removedItem);
+        if (sendMailResult.Succeeded)
+        {
+            removedItem.SetNewLocation(Location.Zero);
+            if (removedItem is IMovableThing movableThing && destination is IThing destinationThing)
+            {
+                movableThing.OnMoved(destinationThing);
+            }
 
-        if (result.Succeeded && item is IMovableThing movableThing && destination is IThing destinationThing)
-            movableThing.OnMoved(destinationThing);
+            var remainingAmount = (byte)(amount - amountToRemove);
+            return remainingAmount > 0
+                ? HandleMailBoxMove(player, item, from, destination, remainingAmount, fromPosition, toPosition)
+                : Result<OperationResultList<IItem>>.Success;
+        }
 
-        var amountResult = (byte)Math.Max(0, amount - (int)possibleAmountToAdd);
-        return amountResult > 0
-            ? ExecuteMove(item, from, destination, amountResult, fromPosition, toPosition)
-            : result;
+        var addition = movement with { Item = removedItem, Amount = removedItem.Amount };
+        var addResult = destination.AddItem(removedItem, addition);
+        if (addResult.Failed)
+        {
+            var restoreResult = RestoreRemovedItem(player, removedItem, from, destination, fromPosition, toPosition);
+            if (restoreResult.Failed) return restoreResult;
+            return addResult;
+        }
+
+        if (removedItem is IMovableThing fallbackMovableItem && destination is IThing fallbackDestination)
+        {
+            fallbackMovableItem.OnMoved(fallbackDestination);
+        }
+
+        var fallbackRemainingAmount = (byte)(amount - amountToRemove);
+        return fallbackRemainingAmount > 0
+            ? HandleMailBoxMove(player, item, from, destination, fallbackRemainingAmount, fromPosition, toPosition)
+            : addResult;
     }
 
     /// <summary>
     ///     Executes the core item move: validates capacity, removes from source, adds to destination.
-    ///     Handles cumulative items by recursively moving remaining amounts.
+    ///     The shared transfer operation handles cumulative overflow iteratively.
     /// </summary>
-    private Result<OperationResultList<IItem>> ExecuteMove(IItem item, IHasItem from,
+    private Result<OperationResultList<IItem>> ExecuteMove(IPlayer player, IItem item, IHasItem from,
         IHasItem destination, byte amount, byte fromPosition, byte? toPosition)
     {
-        if(destination is null)
-        {
-            return Result<OperationResultList<IItem>>.NotPossible;
-        }
-
-        var canAdd = destination.CanAddItem(item, amount, toPosition);
-        if (!canAdd.Succeeded) return new Result<OperationResultList<IItem>>(canAdd.Reason);
-
-        (destination, toPosition) = ResolveContainerDestination(from, destination, toPosition);
-
-        var possibleAmountToAdd = destination.PossibleAmountToAdd(item, toPosition);
-        if (possibleAmountToAdd == 0)
-            return new Result<OperationResultList<IItem>>(InvalidOperation.NotEnoughRoom);
-
-        var removedItem = RemoveItem(item, from, amount, fromPosition, possibleAmountToAdd);
-
-        var result = AddToDestination(removedItem, from, destination, toPosition);
-
-        if (result.Succeeded && item is IMovableThing movableThing && destination is IThing destinationThing)
-            movableThing.OnMoved(destinationThing);
-
-        var amountResult = (byte)Math.Max(0, amount - (int)possibleAmountToAdd);
-        return amountResult > 0
-            ? ExecuteMove(item, from, destination, amountResult, fromPosition, toPosition)
-            : result;
+        var movement = new ItemMovementContext(player, item, from, destination, amount, fromPosition, toPosition);
+        return ItemTransferOperation.Execute(movement);
     }
 
-    /// <summary>
-    ///     Removes the specified amount of an item from the source.
-    ///     For non-cumulative items, always removes exactly 1.
-    /// </summary>
-    private static IItem RemoveItem(IItem item, IHasItem from, byte amount, byte fromPosition,
-        uint possibleAmountToAdd)
+    private static Result<OperationResultList<IItem>> RestoreRemovedItem(IPlayer player, IItem item,
+        IHasItem source, IHasItem failedDestination, byte sourcePosition, byte? failedDestinationPosition)
     {
-        var amountToRemove = item is not ICumulative ? (byte)1 : (byte)Math.Min(amount, possibleAmountToAdd);
-        from.RemoveItem(item, amountToRemove, fromPosition, out var removedThing);
-        return removedThing;
-    }
+        var destinationPosition = source is IInventory ? sourcePosition : (byte?)null;
+        var restoreMovement = new ItemMovementContext(
+            player,
+            item,
+            failedDestination,
+            source,
+            item.Amount,
+            failedDestinationPosition ?? 0,
+            destinationPosition);
+        var canRestore = source.CanAddItem(restoreMovement);
+        if (canRestore.Failed)
+            return new Result<OperationResultList<IItem>>(canRestore.Reason);
 
-    /// <summary>
-    ///     Adds an item to the destination. If the destination returns overflow items
-    ///     (e.g., swapping items), those are added back to the source.
-    /// </summary>
-    private static Result<OperationResultList<IItem>> AddToDestination(IItem thing, IHasItem source,
-        IHasItem destination, byte? toPosition)
-    {
-        var canAdd = destination.CanAddItem(thing, thing.Amount, toPosition);
-        if (!canAdd.Succeeded) return new Result<OperationResultList<IItem>>(canAdd.Reason);
-
-        var result = destination.AddItem(thing, toPosition);
-
-        if (!(result.Value?.HasAnyOperation ?? false)) return result;
-
-        foreach (var operation in result.Value.Operations)
-            if (operation.Item2 == Operation.Removed)
-                source.AddItem(operation.Item1);
-
-        return result;
-    }
-
-    /// <summary>
-    ///     When both source and destination are containers and the player targets a sub-container
-    ///     within the same container, redirects the destination to that sub-container.
-    /// </summary>
-    private static (IHasItem, byte?) ResolveContainerDestination(IHasItem source, IHasItem destination,
-        byte? toPosition)
-    {
-        if (source is not IContainer sourceContainer) return (destination, toPosition);
-        if (destination is not IContainer) return (destination, toPosition);
-
-        if (destination == source && toPosition is not null &&
-            sourceContainer.GetContainerAt(toPosition.Value, out var container))
-            return (container, null);
-
-        return (destination, toPosition);
+        return source.AddItem(item, restoreMovement);
     }
 
     #endregion

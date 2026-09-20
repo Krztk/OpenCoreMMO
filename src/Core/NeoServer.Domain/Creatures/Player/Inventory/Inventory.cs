@@ -1,11 +1,13 @@
 ﻿using NeoServer.Domain.Common;
 using NeoServer.Domain.Common.Combat;
 using NeoServer.Domain.Common.Combat.Structs;
+using NeoServer.Domain.Common.Contracts;
 using NeoServer.Domain.Common.Contracts.Creatures;
 using NeoServer.Domain.Common.Contracts.DataStores;
 using NeoServer.Domain.Common.Contracts.Items;
 using NeoServer.Domain.Common.Contracts.Items.Types;
 using NeoServer.Domain.Common.Contracts.Items.Types.Body;
+using NeoServer.Domain.Common.Creatures.Structs;
 using NeoServer.Domain.Common.Item;
 using NeoServer.Domain.Common.Location.Structs;
 using NeoServer.Domain.Common.Results;
@@ -93,6 +95,12 @@ public class Inventory : IInventory
         return this.CanAddItem(slot is null ? Slot.None : (Slot)slot, thing, amount);
     }
 
+    public Result CanAddItem(in ItemMovementContext context)
+    {
+        var slot = context.DestinationPosition is null ? Slot.None : (Slot)context.DestinationPosition;
+        return this.CanAddItem(slot, context.Item, context.Amount, context.Source);
+    }
+
     public Result<uint> CanAddItem(IItemType itemType)
     {
         return AddToSlotRule.CanAddItem(this, itemType);
@@ -103,6 +111,11 @@ public class Inventory : IInventory
         return PossibleAmountToAddCalculation.Calculate(this, item, toPosition);
     }
 
+    public uint PossibleAmountToAdd(in ItemMovementContext context)
+    {
+        return PossibleAmountToAddCalculation.Calculate(this, context.Item, context.DestinationPosition);
+    }
+
     private void AddItemsToInventory(IDictionary<Slot, (IItem Item, ushort Id)> items)
     {
         foreach (var (slot, (item, _)) in items) TryAddItemToSlot(slot, item);
@@ -110,7 +123,7 @@ public class Inventory : IInventory
 
     #region Operations
 
-    private Result<IItem> TryAddItemToSlot(Slot slot, IItem item)
+    private Result<IItem> TryAddItemToSlot(Slot slot, IItem item, IHasItem source = null)
     {
         if (Owner != null)
             item.SetOwner(Owner);
@@ -118,7 +131,7 @@ public class Inventory : IInventory
         item.SetNewLocation(Location.Inventory(slot), true);
 
         var wasBpSlotEmptyBeforeAddition = BackpackSlot == null;
-        var result = AddToSlotOperation.Add(this, slot, item);
+        var result = AddToSlotOperation.Add(this, slot, item, source);
 
         if (result.Succeeded)
         {
@@ -147,11 +160,21 @@ public class Inventory : IInventory
 
     public Result<OperationResultList<IItem>> AddItem(IItem item, byte? position = null)
     {
+        return AddItem(item, position, null);
+    }
+
+    public Result<OperationResultList<IItem>> AddItem(IItem item, in ItemMovementContext context)
+    {
+        return AddItem(item, context.DestinationPosition, context.Source);
+    }
+
+    private Result<OperationResultList<IItem>> AddItem(IItem item, byte? position, IHasItem source)
+    {
         if (!item.IsPickupable) return Result<OperationResultList<IItem>>.NotPossible;
 
         position ??= (byte)item.Metadata.BodyPosition;
 
-        var swappedItem = TryAddItemToSlot((Slot)position, item);
+        var swappedItem = TryAddItemToSlot((Slot)position, item, source);
 
         if (swappedItem.Failed) return new Result<OperationResultList<IItem>>(swappedItem.Error);
 

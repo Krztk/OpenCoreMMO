@@ -1,4 +1,5 @@
 ﻿using NeoServer.Domain.Common.Contracts.Items;
+using NeoServer.Domain.Common.Contracts;
 using NeoServer.Domain.Common.Contracts.Items.Types;
 using NeoServer.Domain.Common.Location.Structs;
 using NeoServer.Domain.Common.Results;
@@ -8,13 +9,13 @@ namespace NeoServer.Domain.Creatures.Player.Inventory.Operations;
 
 public abstract class AddToSlotOperation
 {
-    public static Result<IItem> Add(Inventory inventory, Slot slot, IItem item)
+    public static Result<IItem> Add(Inventory inventory, Slot slot, IItem item, IHasItem source = null)
     {
-        var result = inventory.CanAddItem(slot, item, item.Amount);
+        var result = inventory.CanAddItem(slot, item, item.Amount, source);
 
         if (result.Failed) return Result<IItem>.Fail(result.Reason);
 
-        if (SwapRule.ShouldSwap(inventory, item, slot)) return SwapOperation.SwapItem(inventory, slot, item);
+        if (SwapRule.ShouldSwap(inventory, item, slot)) return SwapOperation.SwapItem(inventory, slot, item, source);
 
         if (slot is Slot.Backpack) return AddToBackpackOperation.Add(inventory, item);
 

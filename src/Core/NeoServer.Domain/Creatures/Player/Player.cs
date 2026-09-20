@@ -772,7 +772,7 @@ public class Player : CombatActor, IPlayer
         EventAggregator.Invoke(new PlayerLookedAtEvent(this, thing, isClose));
     }
 
-    public void LookAt(byte containerId, sbyte containerSlot)
+    public void LookAt(byte containerId, byte containerSlot)
     {
         if (Containers[containerId][containerSlot] is not IThing thing) return;
         EventAggregator.Invoke(new PlayerLookedAtEvent(this, thing, true));

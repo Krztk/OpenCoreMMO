@@ -1,4 +1,5 @@
 ﻿using NeoServer.Domain.Common.Contracts.Items;
+using NeoServer.Domain.Common.Contracts;
 using NeoServer.Domain.Common.Contracts.Items.Types;
 using NeoServer.Domain.Common.Results;
 
@@ -6,7 +7,7 @@ namespace NeoServer.Domain.Creatures.Player.Inventory.Operations;
 
 public static class SwapOperation
 {
-    public static Result<IItem> SwapItem(Inventory inventory, Slot slot, IItem newItem)
+    public static Result<IItem> SwapItem(Inventory inventory, Slot slot, IItem newItem, IHasItem source = null)
     {
         var (existingItem, _) = inventory.InventoryMap.GetItem(slot);
 
@@ -26,7 +27,7 @@ public static class SwapOperation
 
         var removedItem = result.Value;
 
-        var addResult = AddToSlotOperation.Add(inventory, slot, newItem);
+        var addResult = AddToSlotOperation.Add(inventory, slot, newItem, source);
 
         return addResult.Failed ? result : Result<IItem>.Ok(removedItem);
     }

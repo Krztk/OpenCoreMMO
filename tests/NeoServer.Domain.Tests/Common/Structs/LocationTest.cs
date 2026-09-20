@@ -70,6 +70,8 @@ public class LocationTest
     [InlineData(10, 20)]
     [InlineData(13, 25)]
     [InlineData(15, 6)]
+    [InlineData(15, 254)]
+    [InlineData(15, 255)]
     public void Container_Returns_Type_As_Container(int id, int slot)
     {
         var location = Location.Container(id, (byte)slot);

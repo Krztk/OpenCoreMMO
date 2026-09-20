@@ -65,7 +65,8 @@ public class PlayerMoveItemTests
 
 
     [Fact]
-    public void Player_swaps_item_from_ground_to_inventory()
+    [Trait("Category", "Validation")]
+    public void Player_cannot_swap_weapon_from_ground_to_occupied_inventory_slot()
     {
         //arrange
         var dictionary = new Dictionary<Slot, (IItem Item, ushort Id)>();
@@ -83,9 +84,9 @@ public class PlayerMoveItemTests
         var result = player.MoveItem(item, tile, inventory, 1, 0, (byte)Slot.Left);
 
         //assert
-        Assert.True(result.Succeeded);
-        Assert.Equal(inventory[Slot.Left], item);
-        Assert.Equal(itemOnInventory, tile.TopDownItemOnStack);
+        result.Failed.Should().BeTrue();
+        inventory[Slot.Left].Should().BeSameAs(itemOnInventory);
+        tile.TopDownItemOnStack.Should().BeSameAs(item);
     }
 
     [Fact]

@@ -24,20 +24,32 @@ public static class CanAddItemToContainerRule
             : Result<uint>.Fail(InvalidOperation.NotEnoughRoom);
     }
 
-    public static Result CanAdd(IContainer toContainer, IItem item, byte? slot = null)
+    public static Result CanAdd(IContainer toContainer, IItem item, byte? slot = null, bool autoStack = true)
     {
-        if (item == toContainer) return Result.Fail(InvalidOperation.Impossible);
-
-        if (slot is null && item is not ICumulative && toContainer.IsFull) return Result.Fail(InvalidOperation.IsFull);
+        if (WouldCreateContainerCycle(toContainer, item)) return Result.Fail(InvalidOperation.Impossible);
 
         if (slot is not null && toContainer.GetContainerAt(slot.Value, out var container))
-            return container.CanAddItem(item, slot: slot);
+            return container.CanAddItem(item);
+
+        if (item is not ICumulative && toContainer.IsFull) return Result.Fail(InvalidOperation.IsFull);
 
         if (item is ICumulative cumulative && toContainer.IsFull &&
-            FindSlotOfFirstItemNotFullyQuery.Find(toContainer, cumulative) == -1)
+            FindSlotOfFirstItemNotFullyQuery.Find(toContainer, cumulative, slot, autoStack) == -1)
             return Result.Fail(InvalidOperation.IsFull);
 
         return Result.Success;
+    }
+
+    private static bool WouldCreateContainerCycle(IContainer destination, IItem item)
+    {
+        IThing current = destination;
+        while (current is IItem currentItem)
+        {
+            if (ReferenceEquals(currentItem, item)) return true;
+            current = currentItem.Parent;
+        }
+
+        return false;
     }
 
     private static uint CalculateAmountPossibleToAdd(IContainer toContainer, IItemType itemType)

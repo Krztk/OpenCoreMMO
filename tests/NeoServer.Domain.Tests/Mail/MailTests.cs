@@ -48,9 +48,6 @@ public class MailTests
         player.Inventory.BackpackSlot.AddItem(parcel);
         player.SetNewLocation(new Location(100, 100, 7));
 
-        var from = new Mock<IDynamicTile>();
-        from.Setup(x => x.Location).Returns(new Location(100, 100, 7));
-
         var mailBoxMetadata = new ItemType().SetClientId(1);
         mailBoxMetadata.Attributes.SetAttribute(ItemTypeAttribute.Type, "mailbox");
         var mailBox = new Item(mailBoxMetadata, new Location(100, 101, 7));
@@ -76,7 +73,7 @@ public class MailTests
         var service = new ItemMovementService(walkTo, mailService);
 
         //act
-        var result = service.Move(player, parcel, from.Object, mailboxTile, 1, 0, null, false);
+        var result = service.Move(player, parcel, player.Inventory.BackpackSlot, mailboxTile, 1, 0, null, false);
 
         //result
         result.Succeeded.Should().BeTrue();
@@ -105,9 +102,6 @@ public class MailTests
         player.Inventory.BackpackSlot.AddItem(letter);
         player.SetNewLocation(new Location(100, 100, 7));
 
-        var from = new Mock<IDynamicTile>();
-        from.Setup(x => x.Location).Returns(new Location(100, 100, 7));
-
         var mailBoxMetadata = new ItemType().SetClientId(1);
         mailBoxMetadata.Attributes.SetAttribute(ItemTypeAttribute.Type, "mailbox");
         var mailBox = new Item(mailBoxMetadata, new Location(100, 101, 7));
@@ -133,7 +127,7 @@ public class MailTests
         var service = new ItemMovementService(walkTo, mailService);
 
         //act
-        var result = service.Move(player, letter, from.Object, mailboxTile, 1, 0, null, false);
+        var result = service.Move(player, letter, player.Inventory.BackpackSlot, mailboxTile, 1, 0, null, false);
 
         //result
         result.Succeeded.Should().BeTrue();
@@ -601,9 +595,6 @@ public class MailTests
         player.Inventory.BackpackSlot.AddItem(parcel);
         player.SetNewLocation(new Location(100, 100, 7));
 
-        var from = new Mock<IDynamicTile>();
-        from.Setup(x => x.Location).Returns(new Location(100, 100, 7));
-
         var mailBoxMetadata = new ItemType().SetClientId(1);
         mailBoxMetadata.Attributes.SetAttribute(ItemTypeAttribute.Type, "mailbox");
         var mailBox = new Item(mailBoxMetadata, new Location(100, 101, 7));
@@ -636,7 +627,7 @@ public class MailTests
         var service = new ItemMovementService(walkTo, mailService);
 
         // act
-        var result = service.Move(player, parcel, from.Object, mailboxTile, 1, 0, null, false);
+        var result = service.Move(player, parcel, player.Inventory.BackpackSlot, mailboxTile, 1, 0, null, false);
 
         // assert
         mailInbox.Items.Should().Contain(parcel);
@@ -662,9 +653,6 @@ public class MailTests
         player.Inventory.BackpackSlot.AddItem(letter);
         player.SetNewLocation(new Location(100, 100, 7));
 
-        var from = new Mock<IDynamicTile>();
-        from.Setup(x => x.Location).Returns(new Location(100, 100, 7));
-
         var mailBoxMetadata = new ItemType().SetClientId(1);
         mailBoxMetadata.Attributes.SetAttribute(ItemTypeAttribute.Type, "mailbox");
         var mailBox = new Item(mailBoxMetadata, new Location(100, 101, 7));
@@ -697,7 +685,7 @@ public class MailTests
         var service = new ItemMovementService(walkTo, mailService);
 
         // act
-        var result = service.Move(player, letter, from.Object, mailboxTile, 1, 0, null, false);
+        var result = service.Move(player, letter, player.Inventory.BackpackSlot, mailboxTile, 1, 0, null, false);
 
         // assert
         mailInbox.Items.Should().Contain(letter);

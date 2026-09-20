@@ -1,6 +1,7 @@
 ﻿using NeoServer.Domain.Common.Contracts.Creatures;
 using NeoServer.Domain.Common.Contracts.Items;
 using NeoServer.Domain.Common.Contracts.Items.Types;
+using NeoServer.Domain.Common.Creatures.Structs;
 using NeoServer.Domain.Common.Item;
 using NeoServer.Domain.Common.Location.Structs;
 using NeoServer.Domain.Common.Results;
@@ -81,6 +82,12 @@ public class Container : BaseItem, IContainer
     public uint PossibleAmountToAdd(IItem item, byte? toPosition = null)
     {
         return PossibleAmountToAddCalculation.Calculate(this, item);
+    }
+
+    public uint PossibleAmountToAdd(in ItemMovementContext context)
+    {
+        return PossibleAmountToAddCalculation.Calculate(this, context.Item, context.DestinationPosition,
+            !ReferenceEquals(context.Source, this));
     }
 
     public void OnMoved(IThing to)
@@ -209,6 +216,12 @@ public class Container : BaseItem, IContainer
         return CanAddItemToContainerRule.CanAdd(this, item, slot);
     }
 
+    public Result CanAddItem(in ItemMovementContext context)
+    {
+        return CanAddItemToContainerRule.CanAdd(this, context.Item, context.DestinationPosition,
+            !ReferenceEquals(context.Source, this));
+    }
+
     public bool CanBeDressed(IPlayer player)
     {
         return true;
@@ -246,6 +259,15 @@ public class Container : BaseItem, IContainer
         if (item is null) return Result<OperationResultList<IItem>>.NotPossible;
 
         return new Result<OperationResultList<IItem>>(AddItemOperation.TryAddItem(this, item, position).Reason);
+    }
+
+    public Result<OperationResultList<IItem>> AddItem(IItem item, in ItemMovementContext context)
+    {
+        if (item is null) return Result<OperationResultList<IItem>>.NotPossible;
+
+        var result = AddItemOperation.TryAddItem(this, item, context.DestinationPosition,
+            !ReferenceEquals(context.Source, this));
+        return new Result<OperationResultList<IItem>>(result.Reason);
     }
 
     public bool UpdateItem(IItem item, IItemType newType)

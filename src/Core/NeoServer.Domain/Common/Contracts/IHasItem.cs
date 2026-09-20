@@ -1,4 +1,5 @@
 ﻿using NeoServer.Domain.Common.Contracts.Items;
+using NeoServer.Domain.Common.Creatures.Structs;
 using NeoServer.Domain.Common.Results;
 
 namespace NeoServer.Domain.Common.Contracts;
@@ -8,6 +9,11 @@ namespace NeoServer.Domain.Common.Contracts;
 /// </summary>
 public interface IHasItem
 {
+    Result CanAddItem(in ItemMovementContext context)
+    {
+        return CanAddItem(context.Item, context.Amount, context.DestinationPosition);
+    }
+
     /// <summary>
     ///     Checks if thing can be added to destination
     /// </summary>
@@ -25,6 +31,11 @@ public interface IHasItem
     /// <returns></returns>
     uint PossibleAmountToAdd(IItem thing, byte? toPosition = null);
 
+    uint PossibleAmountToAdd(in ItemMovementContext context)
+    {
+        return PossibleAmountToAdd(context.Item, context.DestinationPosition);
+    }
+
     /// <summary>
     ///     Stores thing
     /// </summary>
@@ -32,6 +43,11 @@ public interface IHasItem
     /// <param name="position">position where thing will be stored</param>
     /// <returns></returns>
     Result<OperationResultList<IItem>> AddItem(IItem item, byte? position = null);
+
+    Result<OperationResultList<IItem>> AddItem(IItem item, in ItemMovementContext context)
+    {
+        return AddItem(item, context.DestinationPosition);
+    }
 
     /// <summary>
     ///     Removes thing from store

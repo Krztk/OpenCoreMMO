@@ -76,7 +76,7 @@ public struct Location(ushort x, ushort y, byte z) : IEquatable<Location>, IConv
     // public byte Container => Convert.ToByte(Y - 0x40);
     public byte ContainerId => Convert.ToByte(Y & 0x0F);
 
-    public sbyte ContainerSlot => Convert.ToSByte(Z);
+    public byte ContainerSlot => Z;
 
     public int MaxValueIn2D => Math.Max(Math.Abs(X), Math.Abs(Y));
 

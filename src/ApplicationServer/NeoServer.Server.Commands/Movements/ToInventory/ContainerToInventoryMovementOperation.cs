@@ -19,8 +19,8 @@ public class ContainerToInventoryMovementOperation
 
         if (!item.IsPickupable) return;
 
-        if (scriptManager.MoveEvents.EquipItem(player, item, itemThrow.ToLocation.Slot, false).HasValue)
-            return;
+        if (!EquipmentExchangeMovementOperation.TryPrepare(player, item, container, itemThrow.ToLocation.Slot,
+                scriptManager.MoveEvents)) return;
 
         player.MoveItem(item, container, player.Inventory, itemThrow.Count,
             (byte)itemThrow.FromLocation.ContainerSlot, (byte)itemThrow.ToLocation.Slot);

@@ -9,18 +9,20 @@ namespace NeoServer.Domain.Items.Items.Containers.Container.Operations.Add;
 
 internal static class AddItemOperation
 {
-    public static Result TryAddItem(Container toContainer, IItem item, byte? position = null)
+    public static Result TryAddItem(Container toContainer, IItem item, byte? position = null, bool autoStack = true)
     {
         if (item is null) return Result.NotPossible;
 
         if (position.HasValue && toContainer.Capacity <= position) position = null;
 
-        var validation = CanAddItemToContainerRule.CanAdd(toContainer, item, position);
+        var targetPosition = position;
+
+        var validation = CanAddItemToContainerRule.CanAdd(toContainer, item, position, autoStack);
         if (!validation.Succeeded) return validation;
 
         position ??= toContainer.LastFreeSlot;
 
-        return AddItem(toContainer, item, position);
+        return AddItem(toContainer, item, position, targetPosition, autoStack);
     }
 
     public static void AddChildren(Container container, IEnumerable<IItem> children)
@@ -30,25 +32,28 @@ internal static class AddItemOperation
         foreach (var item in children.Reverse()) TryAddItem(container, item);
     }
 
-    private static Result AddItem(Container toContainer, IItem item, byte? position)
+    private static Result AddItem(Container toContainer, IItem item, byte? position, byte? targetPosition,
+        bool autoStack)
     {
         var result = toContainer.GetContainerAt(position.Value, out var container)
             ? container.AddItem(item).ResultValue
-            : AddItem(toContainer, item, position.Value);
+            : AddItem(toContainer, item, position.Value, targetPosition, autoStack);
 
         item.SetParent(container ?? toContainer);
 
         return result;
     }
 
-    private static Result AddItem(Container toContainer, IItem item, byte position)
+    private static Result AddItem(Container toContainer, IItem item, byte position, byte? targetPosition,
+        bool autoStack)
     {
         if (item is null) return Result.NotPossible;
         if (toContainer.Capacity <= position) throw new ArgumentOutOfRangeException(nameof(toContainer));
 
         if (item is not ICumulative cumulativeItem) return AddItemToFrontOperation.Add(toContainer, item);
 
-        var itemToJoinSlot = FindSlotOfFirstItemNotFullyQuery.Find(toContainer, cumulativeItem);
+        var itemToJoinSlot = FindSlotOfFirstItemNotFullyQuery.Find(toContainer, cumulativeItem, targetPosition,
+            autoStack);
 
         if (itemToJoinSlot >= 0 && cumulativeItem is { } cumulative)
             return JoinCumulativeItemOperation.Join(toContainer, cumulative, (byte)itemToJoinSlot);

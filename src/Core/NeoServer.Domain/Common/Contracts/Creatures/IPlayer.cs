@@ -201,7 +201,7 @@ public interface IPlayer : ICombatActor, ISociableCreature, IBankable
     bool Logout(bool forced = false);
     ushort CalculateAttackPower(float attackRate, ushort attack);
     void LookAt(ITile tile);
-    void LookAt(byte containerId, sbyte containerSlot);
+    void LookAt(byte containerId, byte containerSlot);
     void LookAt(Slot slot);
 
     /// <summary>

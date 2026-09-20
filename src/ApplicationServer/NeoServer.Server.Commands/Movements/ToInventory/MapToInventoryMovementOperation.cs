@@ -21,8 +21,8 @@ public sealed class MapToInventoryMovementOperation(IItemMovementService itemMov
         if (fromTile.TopDownItemOnStack is not { } item) return;
         if (fromTile is not IDynamicTile dynamicTile) return;
 
-        if (scriptManager.MoveEvents.EquipItem(player, item, itemThrow.ToLocation.Slot, false).HasValue)
-            return;
+        if (!EquipmentExchangeMovementOperation.TryPrepare(player, item, dynamicTile, itemThrow.ToLocation.Slot,
+                scriptManager.MoveEvents)) return;
 
         var result = itemMovementService.Move(player, item, dynamicTile, player.Inventory, itemThrow.Count, 0,
             (byte)itemThrow.ToLocation.Slot);

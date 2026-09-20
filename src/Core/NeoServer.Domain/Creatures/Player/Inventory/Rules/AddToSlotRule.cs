@@ -1,4 +1,6 @@
 ﻿using NeoServer.Domain.Common;
+using NeoServer.Domain.Common.Contracts;
+using NeoServer.Domain.Common.Contracts.Creatures;
 using NeoServer.Domain.Common.Contracts.Items;
 using NeoServer.Domain.Common.Contracts.Items.Types;
 using NeoServer.Domain.Common.Contracts.Items.Types.Body;
@@ -9,13 +11,14 @@ namespace NeoServer.Domain.Creatures.Player.Inventory.Rules;
 
 internal static class AddToSlotRule
 {
-    public static Result CanAddItem(this Inventory inventory, Slot slot, IItem item, byte amount)
+    public static Result CanAddItem(this Inventory inventory, Slot slot, IItem item, byte amount,
+        IHasItem source = null)
     {
         if (Guard.AnyNull(slot, item)) return Result.NotPossible;
 
         if (!item.IsPickupable) return Result.NotPossible;
 
-        if (!CanCarryItem(inventory, item, slot, amount)) return Result.Fail(InvalidOperation.TooHeavy);
+        if (!CanCarryItem(inventory, item, slot, amount, source)) return Result.Fail(InvalidOperation.TooHeavy);
 
         return inventory.CanAddItemToSlot(slot, item);
     }
@@ -40,8 +43,10 @@ internal static class AddToSlotRule
         return inventoryItem.Slot != slot ? cannotDressFail : Result.Success;
     }
 
-    private static bool CanCarryItem(Inventory inventory, IItem item, Slot slot, byte amount = 1)
+    private static bool CanCarryItem(Inventory inventory, IItem item, Slot slot, byte amount, IHasItem source)
     {
+        if (IsAlreadyCarriedByOwner(inventory, source)) return true;
+
         var itemWeight = item is ICumulative c ? c.CalculateWeight(amount) : item.Weight;
 
         if (SwapRule.ShouldSwap(inventory, item, slot))
@@ -63,6 +68,14 @@ internal static class AddToSlotRule
 
         var canCarry = inventory.TotalWeight + weight <= inventory.Owner.TotalCapacity;
         return canCarry;
+    }
+
+    private static bool IsAlreadyCarriedByOwner(Inventory inventory, IHasItem source)
+    {
+        if (source is IInventory sourceInventory)
+            return ReferenceEquals(sourceInventory.Owner, inventory.Owner);
+
+        return source is IContainer sourceContainer && ReferenceEquals(sourceContainer.RootParent, inventory.Owner);
     }
 
     public static Result<uint> CanAddItem(Inventory inventory, IItemType itemType)

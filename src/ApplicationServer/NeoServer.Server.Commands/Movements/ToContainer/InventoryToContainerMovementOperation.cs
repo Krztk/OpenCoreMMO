@@ -21,7 +21,7 @@ public class InventoryToContainerMovementOperation
         if (item is null) return;
         if (!item.IsPickupable) return;
 
-        if (scriptManager.MoveEvents.DeEquipItem(player, item, itemThrow.FromLocation.Slot, false).HasValue)
+        if (scriptManager.MoveEvents.DeEquipItem(player, item, itemThrow.FromLocation.Slot, false) is false)
             return;
 
         player.MoveItem(item, player.Inventory, container, itemThrow.Count, (byte)itemThrow.FromLocation.Slot,
